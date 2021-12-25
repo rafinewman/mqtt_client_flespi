@@ -14,9 +14,10 @@ Public Class Form1
     Dim mqFactory As New MqttFactory
 
     Sub mmqt_start()
-        Connect("client_id_1", "mqtt.flespi.io", "IVc4iYV4PP9wCUjIWIGS1sSSaABfNvajgccpYVhEAe00Y8zIG5oxl4dltEo6Zoe4", "").Wait()
+        Connect("client_id_dev_msgs", "mqtt.flespi.io", "IVc4iYV4PP9wCUjIWIGS1sSSaABfNvajgccpYVhEAe00Y8zIG5oxl4dltEo6Zoe4", "").Wait()
         'Publish("topic/volume", "20").Wait()
-        Subscribe("flespi/interval/gw/calcs/+/devices/+/created").Wait()
+        'Subscribe("flespi/interval/gw/calcs/+/devices/+/created").Wait()
+        Subscribe("flespi/message/gw/devices/#").Wait()
     End Sub
 
     Async Function Connect(Client As String, Server As String, User As String, Password As String) As Task
@@ -24,8 +25,6 @@ Public Class Form1
         mqClient.UseApplicationMessageReceivedHandler(AddressOf MessageRecieved)
         mqClient.UseDisconnectedHandler(AddressOf ConnectionClosed)
         mqClient.UseConnectedHandler(AddressOf ConnectionOpened)
-
-
 
         Dim Options As New Options.MqttClientOptionsBuilder
         Options.WithClientId(Client).WithTcpServer(Server, 1883).WithCredentials(User, Password).WithCleanSession(False)
@@ -41,8 +40,8 @@ Public Class Form1
     End Function
 
     Private Sub MessageRecieved(e As MqttApplicationMessageReceivedEventArgs)
-        MessageBox.Show("Topic: " & e.ApplicationMessage.Topic & Chr(10) & Chr(13) &
-                        "Payload: " & Encoding.UTF8.GetString(e.ApplicationMessage.Payload))
+        'MessageBox.Show("Topic: " & e.ApplicationMessage.Topic & Chr(10) & Chr(13) & "Payload: " & Encoding.UTF8.GetString(e.ApplicationMessage.Payload))
+        EDTUtils20.LogFiles.Log(Encoding.UTF8.GetString(e.ApplicationMessage.Payload))
     End Sub
 
     Private Sub ConnectionClosed(e As Disconnecting.MqttClientDisconnectedEventArgs)
