@@ -9,7 +9,6 @@ Public Class Form1
         mmqt_start()
     End Sub
 
-
     Dim mqClient As MqttClient
     Dim mqFactory As New MqttFactory
 
