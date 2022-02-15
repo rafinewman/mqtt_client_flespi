@@ -63,16 +63,21 @@
     <OptionInfer>On</OptionInfer>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="EDTUtils20">
-      <HintPath>..\..\..\..\..\Dev\EDT.Common.20\EDT.Utils\EdtUtils\bin\EDTUtils20.dll</HintPath>
+    <Reference Include="EDTUtils4x">
+      <HintPath>..\..\..\..\..\..\Dev\EDT.Common.20\EDT.Utils\EdtUtils4x\obj\Release\EDTUtils4x.dll</HintPath>
     </Reference>
     <Reference Include="MQTTnet, Version=3.1.1.0, Culture=neutral, PublicKeyToken=b69712f52770c0a7, processorArchitecture=MSIL">
       <HintPath>packages\MQTTnet.3.1.1\lib\net461\MQTTnet.dll</HintPath>
     </Reference>
+    <Reference Include="Newtonsoft.Json, Version=13.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <HintPath>packages\Newtonsoft.Json.13.0.1\lib\net45\Newtonsoft.Json.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
+    <Reference Include="System.Configuration" />
     <Reference Include="System.Data" />
     <Reference Include="System.Deployment" />
     <Reference Include="System.Drawing" />
+    <Reference Include="System.Messaging" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml" />
     <Reference Include="System.Core" />
