@@ -9,38 +9,10 @@ Imports System.Configuration.ConfigurationManager
 Imports System.IO
 Imports System.Threading
 
-Public Class globals
-    Public Shared vehicles_fuel_tbl As New SortedList(Of String, Array)
-
-    Public Shared Sub init(path As String)
-        EDTUtils4x.LogFiles.SingleLogFile = True
-        'vehicles_fuel_tbl.Add("860037053946266", {{0, 0}, {204, 18}, {429, 36}, {619, 54}, {797, 72}, {961, 90}, {1099, 108}, {1289, 126}, {1422, 144}, {1569, 162}, {1715, 180}, {1861, 198}, {2007, 216}, {2154, 234}, {2304, 252}, {2457, 270}, {2615, 288}, {2779, 306}, {2953, 324}, {3145, 342}, {3365, 360}, {3654, 380}})
-        Dim l As String
-        ' HttpRuntime.AppDomainAppPath
-        Dim r As New StreamReader(path + "\FuelLevelConversion.txt")
-        'Dim r As StreamReader = New StreamReader("c:\temp\flespi\FuelLevelConversion.txt")
-        l = r.ReadLine
-        While l IsNot Nothing
-            'parse line
-            Dim s1 As String() = l.Split(":")
-            Dim s2 As String() = s1(1).Split(";")
-            Dim a(s2.Length - 1, 1) As Integer
-            For k As Integer = 0 To s2.Length - 1
-                Dim s3 As String() = s2(k).Split(",")
-                a(k, 0) = s3(0)
-                a(k, 1) = s3(1)
-            Next
-            vehicles_fuel_tbl.Add(s1(0), a)
-            l = r.ReadLine
-        End While
-
-
-    End Sub
-End Class
-
 
 Public Class Form1
     Private Sub Form1_Load(sender As Object, e As EventArgs) Handles MyBase.Load
+
         Dim bRecoverableQ As Boolean
         Try
             MAX_Q_4_CS_V3 = CInt(AppSettings("TARGET_CS_MAX_NUMBER_Q"))
@@ -78,12 +50,14 @@ Public Class Form1
         Try
             Connect("client_id_dev_intervals", "mqtt.flespi.io", "TWcsRYShmHGOEAXoiZvf68b8zVQX2UTLFW1mIHsUcYwGmjUv6fA3cCZBnEmdm5MR", "").Wait()
             'Publish("topic/volume", "20").Wait()
-            Subscribe("flespi/interval/gw/calcs/+/devices/+/created,updated,deactivated,activated").Wait()
+            'Subscribe("flespi/interval/gw/calcs/+/devices/+/created,updated,deactivated,activated").Wait()
+            Subscribe("flespi/interval/gw/calcs/+/devices/+/created,updated").Wait()
             'Subscribe("flespi/interval/gw/calcs/+/devices/+/updated").Wait()
             'Subscribe("flespi/interval/gw/calcs/+/devices/+/deactivated ").Wait()
             'Subscribe("flespi/interval/gw/calcs/+/devices/+/activated").Wait()
             'Subscribe("flespi/state/gw/calcs/598009/devices/+/last").Wait()
             'Subscribe("flespi/message/gw/devices/#").Wait()
+            EDTUtils4x.LogFiles.Log("mmqt_start. ThreadID=" & Thread.CurrentThread.ManagedThreadId)
         Catch ex As Exception
             EDTUtils4x.LogFiles.Log(ex)
         End Try
@@ -118,9 +92,17 @@ Public Class Form1
     Private Sub MessageRecieved(e As MqttApplicationMessageReceivedEventArgs)
         Dim s() As String
         Dim topic_event As String = ""
-        'MessageBox.Show("Topic: " & e.ApplicationMessage.Topic & Chr(10) & Chr(13) & "Payload: " & Encoding.UTF8.GetString(e.ApplicationMessage.Payload))
-        EDTUtils4x.LogFiles.Log(e.ApplicationMessage.Topic & " : " & Encoding.UTF8.GetString(e.ApplicationMessage.Payload))
+        Dim pl As String = ""
 
+        e.AutoAcknowledge = True
+
+        'MessageBox.Show("Topic: " & e.ApplicationMessage.Topic & Chr(10) & Chr(13) & "Payload: " & Encoding.UTF8.GetString(e.ApplicationMessage.Payload))
+        If e.ApplicationMessage.Payload IsNot Nothing Then
+            pl = Encoding.UTF8.GetString(e.ApplicationMessage.Payload)
+        End If
+        EDTUtils4x.LogFiles.Log("MessageRecieved. ThreadID=" & Thread.CurrentThread.ManagedThreadId)
+        EDTUtils4x.LogFiles.Log(e.ApplicationMessage.Topic & " : " & pl)
+        If pl = "" Then Return
         'parse to get the exact calculator event
         Try
             s = e.ApplicationMessage.Topic.Split("/")
@@ -129,17 +111,19 @@ Public Class Form1
             EDTUtils4x.LogFiles.Log(ex)
         End Try
 
-        ProcessPayload(topic_event, Encoding.UTF8.GetString(e.ApplicationMessage.Payload))
+        If {"created", "updated"}.Contains(topic_event) Then
+            ProcessPayload(pl)
+        End If
+
         If nCounter = 0 Then t1 = Now.Ticks
 
         nCounter += 1
         If nCounter = 1000 Then EDTUtils4x.LogFiles.Log("1000 msgs: " & (Now.Ticks - t1) \ 10000 & " ms")
         If nCounter = 2000 Then EDTUtils4x.LogFiles.Log("2000 msgs: " & (Now.Ticks - t1) \ 10000 & " ms")
 
-        e.AutoAcknowledge = 1
     End Sub
 
-    Private Function ProcessPayload(calculator_event As String, pl As String) As Integer
+    Private Function ProcessPayload(pl As String) As Integer
 
         Dim j As JToken = JObject.Parse(pl)
         Debug.WriteLine(j.Count)
@@ -163,14 +147,17 @@ Public Class Form1
         'Dim fuel_level_first_pct As Decimal = -1
         Dim refuel_delta_liters As Decimal = -1
         Dim refuel_delta_pct As Decimal = -1
-
+        Dim interval_begin_time As Integer
+        Dim calc_type As String = ""
         Dim DeviceID As String
         Dim x As String 'rtlang xml
+        Dim final_event_code As Integer = 0
 
         servertimeStamp = CDate("1970-1-1").AddSeconds(j("timestamp").ToString).ToString("yyyy-MM-dd HH:mm:ss")
         DeviceID = j("ident").ToString
+        calc_type = j("calc.type").ToString
         ''!!!  check device id , if empty then ignore message !!!
-        x = "<IMsg><Hr><OC>IM1</OC><CS>777</CS><MRT>" + servertimeStamp + "</MRT><DI>" + DeviceID + "</DI></Hr><By>"
+        x = "<IMsg><Hr><OC>IM1</OC><CS>777</CS><MRT>" + servertimeStamp + "</MRT><DI>" + DeviceID + "</DI><FLSPI>" & calc_type & "</FLSPI></Hr><By>"
 
         For Each jp As JProperty In j
             Dim p As String = jp.Name
@@ -189,6 +176,8 @@ Public Class Form1
                     x += "<BE><N>P9</N><V>" + v + "</V></BE>"
                 Case "end"
                     EventTime = CDate("1970-1-1").AddSeconds(v)
+                Case "begin"
+                    interval_begin_time = v
                 Case "external.powersource.voltage"
                     x += "<BE><N>P14</N><V>" + v + "</V></BE>"
                 Case "gsm.signal.level", "gsm.signal.dbm"
@@ -241,17 +230,29 @@ Public Class Form1
                 refuel_delta_liters = fuel_level_last_liters - fuel_level_first_liters
                 refuel_delta_pct = 100.0 * refuel_delta_liters / tank_size_liters
                 fuel_level_last_pct = 100.0 * fuel_level_last_liters / tank_size_liters
-                If refuel_delta_pct > 0 And refuel_delta_pct < 11 Then
-                    'log small refuel record
-                    EDTUtils4x.LogFiles.Log("small refuel pct")
-                    Return 0
-                End If
+                Select Case calc_type
+                    Case "refuel"
+                        If refuel_delta_pct > 0 And refuel_delta_pct < 11 Then
+                            'log small refuel record
+                            EDTUtils4x.LogFiles.Log(String.Format("small refuel pct {0:0.0}% , {1:0.0}L", refuel_delta_pct, refuel_delta_liters))
+                            Return 0
+                        End If
+                        final_event_code = 204
+                    Case "drain"
+                        If refuel_delta_pct < 0 And refuel_delta_pct > 6 Then
+                            'log small refuel record
+                            EDTUtils4x.LogFiles.Log(String.Format("small drain pct {0:0.0}% , {1:0.0}L", refuel_delta_pct, refuel_delta_liters))
+                            Return 0
+                        End If
+                        final_event_code = 203
+                End Select
+
             End If
 
             'gps status
             x += "<BE><N>P5</N><V>2</V></BE>"
             If fuel_level_last_pct > -1 Then x += "<BE><N>P28</N><V>" & fuel_level_last_pct.ToString("0.0") & "</V></BE>"
-            x += "<BE><N>P18</N><V>204</V></BE><BE><N>P19</N><V>" & refuel_delta_pct.ToString("0.00") & "</V></BE><BE><N>P2537</N><V>" & refuel_delta_liters.ToString("0.0") & "</V></BE>"
+            x += "<BE><N>P18</N><V>" & final_event_code & "</V></BE><BE><N>P19</N><V>" & Math.Abs(refuel_delta_pct).ToString("0.00") & "</V></BE><BE><N>P2537</N><V>" & Math.Abs(refuel_delta_liters).ToString("0.0") & "</V></BE>"
 
             If engine_rpm > "" Then x += "<BE><N>P21</N><V>" & engine_rpm & "</V></BE>"
             If engine_hours > "" Then x += "<BE><N>P22</N><V>" & CInt(engine_hours) * 60 & "</V></BE>"
@@ -270,12 +271,13 @@ Public Class Form1
                     x += "<BE><N>P104</N><V>45</V></BE><BE><N>P102</N><V>1</V></BE>"
             End Select
 
-            x += "</By></IMsg>"
+            x += "<BE><N>P9003</N><V>" & interval_begin_time & "</V></BE></By></IMsg>"
 
             Debug.WriteLine(x)
 
             Dim qID As Integer = HashDeviceid2Number(DeviceID, MAX_Q_4_CS_V3)
             Send2Queue(x, qID)
+            EDTUtils4x.LogFiles.Log("Sent: " & x)
         Catch ex As Exception
             EDTUtils4x.LogFiles.Log(ex)
         End Try
@@ -337,6 +339,36 @@ Public Class Form1
     End Sub
 
     Private Sub ConnectionOpened(e As Connecting.MqttClientConnectedEventArgs)
-        EDTUtils4x.LogFiles.Log("Connection opened")
+        EDTUtils4x.LogFiles.Log("Connection opened. ThreadID=" & Thread.CurrentThread.ManagedThreadId)
+    End Sub
+End Class
+
+
+Public Class globals
+    Public Shared vehicles_fuel_tbl As New SortedList(Of String, Array)
+
+    Public Shared Sub init(path As String)
+        EDTUtils4x.LogFiles.SingleLogFile = True
+        'vehicles_fuel_tbl.Add("860037053946266", {{0, 0}, {204, 18}, {429, 36}, {619, 54}, {797, 72}, {961, 90}, {1099, 108}, {1289, 126}, {1422, 144}, {1569, 162}, {1715, 180}, {1861, 198}, {2007, 216}, {2154, 234}, {2304, 252}, {2457, 270}, {2615, 288}, {2779, 306}, {2953, 324}, {3145, 342}, {3365, 360}, {3654, 380}})
+        Dim l As String
+        ' HttpRuntime.AppDomainAppPath
+        Dim r As New StreamReader(path + "\FuelLevelConversion.txt")
+        'Dim r As StreamReader = New StreamReader("c:\temp\flespi\FuelLevelConversion.txt")
+        l = r.ReadLine
+        While l IsNot Nothing
+            'parse line
+            Dim s1 As String() = l.Split(":")
+            Dim s2 As String() = s1(1).Split(";")
+            Dim a(s2.Length - 1, 1) As Integer
+            For k As Integer = 0 To s2.Length - 1
+                Dim s3 As String() = s2(k).Split(",")
+                a(k, 0) = s3(0)
+                a(k, 1) = s3(1)
+            Next
+            vehicles_fuel_tbl.Add(s1(0), a)
+            l = r.ReadLine
+        End While
+
+
     End Sub
 End Class
